@@ -9,3 +9,5 @@
 #瓦片下载方式有很多种百度上有也可以邮箱咨询本人
 
 #js/baiduUtil.js 可以将原始gps转换成百度坐标
+
+#baiduMapIndex-yangz.html 实现了 定位 轨迹 回放 等功能（非离线模式）
