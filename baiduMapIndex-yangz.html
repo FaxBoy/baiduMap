@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <style type="text/css">
+        body, html, #locationmap {width: 100%;height: 100%;overflow: hidden;margin:0;}
+		#controller{width:100%; border-bottom:3px outset; height:30px; filter:alpha(Opacity=100); -moz-opacity:1; opacity:1; z-index:10000; background-color:lightblue;}  
+    </style>
+    <script type="text/javascript" src="jquery/jquery.min.js"></script>
+    <script src="js/baiduUtil.js"></script>
+    <script type="text/javascript" src="http://api.map.baidu.com/api?v=1.4&ak=6EsBSGmboywey5wKc3zNKOudqPN3LQNx"></script>
+	<script type="text/javascript" src="http://api.map.baidu.com/library/CurveLine/1.5/src/CurveLine.min.js"></script>
+	<script type="text/javascript" src="http://api.map.baidu.com/library/SearchInfoWindow/1.5/src/SearchInfoWindow_min.js"></script>
+	<link rel="stylesheet" href="http://api.map.baidu.com/library/SearchInfoWindow/1.5/src/SearchInfoWindow_min.css" /> 
+	<link rel="stylesheet" type="text/css" href="jquery-easyui-1.3.6/themes/default/easyui.css">
+	<link rel="stylesheet" type="text/css" href="jquery-easyui-1.3.6/themes/icon.css">
+	<script type="text/javascript" src="jquery-easyui-1.3.6/jquery.easyui.min.js"></script>
+	<script src="laydate/laydate.js"></script>
+    <title>轨迹查询</title>
+</head>
+<body>
+<div style="width:100%;height:70px;background-color:lightblue;padding-top:5px;">
+	<div style="vertical-align: middle; ">
+	
+		<table style="margin-left: auto; margin-right: auto;"> 
+			<tr> 
+				<td> <label>巡查部门：</label> </td> 
+				<td colspan="2"> <select class="selectDept" onchange= "selectDept(this.options[this.options.selectedIndex].value)"></select> </td> 
+				<td> <label>巡查人员：</label> </td> 
+				<td colspan="2"> <select class="selectUser" onchange= "selectUser(this.options[this.options.selectedIndex].value)"></select></td> 
+				
+				<td><input type="button" value="最新位置查询" class="addressNews"/></td> 
+			</tr> 
+			<tr> 
+				<td> <label>巡查部门：</label> </td> 
+				<td colspan="2"> <select class="selectDept2" onchange= "selectDept2(this.options[this.options.selectedIndex].value)"></select> </td> 
+				<td> <label>巡查人员：</label> </td> 
+				<td colspan="2"> <select class="selectUser2" onchange= "selectUser2(this.options[this.options.selectedIndex].value)"></select></td> 
+				<td> <label>日期：</label> 
+					<input class="laydate-icon" onclick="laydate()" id="startDate" style="width:80px;">
+					<input type="button" value="人员轨迹查询" class="gjcx"/>
+					<input type="button" value="轨迹回放" class="gjhf" />
+				</td> 
+				
+			</tr> 
+			
+		</table>
+	</div>
+</div>
+<div id="locationmap"></div>
+	<div id="myShow" style="display:none;">
+        <img alt="loading" src="../baiduMap/images/loading.gif" />
+    </div>
+</body>
+</html>
+<script type="text/javascript">
+//实现功能
+//人员定位
+//人员轨迹
+//轨迹回放待定
+var url='http://116.66.45.70:35082/YangZhouDataServer/';
+var city = "扬州";
+//var point = new BMap.Point(121.506321, 39.915);
+var map = new BMap.Map("locationmap"); // 百度地图API功能
+map.centerAndZoom(city, 15); // 设置地图显示的城市和地图级别
+map.enableScrollWheelZoom(); // 启用滚轮放大缩小，默认禁用
+map.enableContinuousZoom(); // 启用地图惯性拖拽，默认禁用
+map.addControl(new BMap.NavigationControl());  // 添加默认缩放平移控件
+map.addControl(new BMap.ScaleControl()); // 添加比例尺控件
+map.addControl(new BMap.MapTypeControl()); // 添加地图类型控件
+map.addControl(new BMap.OverviewMapControl());  // 添加缩略地图控件
+var c=new Convertor();
+var points = [];
+var DEPTNAME ="";
+var DEPTNAME2 ="";
+var userName2 ="";
+	
+$(function(){
+	deptHtml();
+	deptHtml2();
+	getDate();
+})
+
+//轨迹查询
+$(".gjcx").click(function(){
+	guijSeach();
+	map.clearOverlays(); // 清除标注信息
+});
+$(".addressNews").click(function(){
+	userAddress();
+})
+
+function userAddress(){
+	map.clearOverlays();
+	$.ajax({
+		type:'GET',
+		url:url+'yz/getDeptNewPosition?username='+$(".selectUser").val()+'&deptname='+DEPTNAME,
+		
+		beforeSend:function(XMLHttpRequest){
+                  $("#myShow").css({display:"",top:"50%",left:"50%",position:"absolute"});
+             },
+		success:function(data){
+		$("#myShow").hide();
+			var result = data.newPositionArr;
+			//console.info(data);
+			if(result.length>0){
+				//search(result,1);
+				 $.each(result,function(i){
+				 	search(result[i],i,1);
+				 })
+			}else{
+				map.clearOverlays();
+				$.messager.show({  
+					title: '提示',  
+					msg: '没有结果',  
+					timeout: 3000,  
+					showType: 'slide'  
+				});  
+			}
+		}
+	})
+}
+function getDate(){
+	var date = new Date();
+	var seperator1 = "-";
+	var year = date.getFullYear();
+	var month = date.getMonth() + 1;
+	var strDate = date.getDate();
+	
+	month =(month<10 ? "0"+month:month); 
+	strDate=(strDate<10 ? "0"+strDate:strDate); 
+	$('#startDate').val(year+seperator1+month+seperator1+strDate);
+}
+function guijSeach(){
+	map.clearOverlays();
+	var datas={'userName':userName2,'dayTime':'2017-10-26'};
+	$.ajax({
+		type:'GET',
+		url:url+'yz/queryRoute?userName='+userName2+'&dayTime='+$('#startDate').val(),
+		
+		beforeSend:function(XMLHttpRequest){
+                  $("#myShow").css({display:"",top:"50%",left:"50%",position:"absolute"});
+             },
+		success:function(data){
+		$("#myShow").hide();
+			var result = data.detailArr;
+			//console.info(data);
+			if(result.length>0){
+				search(result,1,2);
+				// $.each(result,function(i){
+				// 	search(result[i],i);
+				// })
+			}else{
+				map.clearOverlays();
+				$.messager.show({  
+					title: '提示',  
+					msg: '没有结果',  
+					timeout: 3000,  
+					showType: 'slide'  
+				});  
+			}
+		}
+	})
+}
+
+//部门列表
+function deptHtml(){
+	$.ajax({
+		type:'GET',
+		url:url+'yz/getDeptList',
+		success:function(data){
+		$("#myShow").hide();
+			var result = data.deptArr;
+			//console.info(data);
+			if(result.length>0){
+				var html='';
+				//html +='<option value ="0">全部</option>';
+				$.each(result,function(i){
+					if(i==0){
+						DEPTNAME = result[i].DEPTNAME;
+						userHtml();
+					}
+					html +='<option value ="'+result[i].DEPTNAME+'">'+result[i].DEPTNAME+'</option>';
+				})
+				$(".selectDept").html(html);
+			}else{
+				$.messager.show({  
+					title: '提示',  
+					msg: '没有结果',  
+					timeout: 3000,  
+					showType: 'slide'  
+				});  
+			}
+		}
+	})
+}
+//巡查人员列表
+function userHtml(){
+	$.ajax({
+		type:'GET',
+		url:url+'yz/getUserNameListByDept?deptname='+DEPTNAME,
+		success:function(data){
+		$("#myShow").hide();
+			var result = data.userArr;
+			//console.info(data);
+			if(result.length>0){
+				var html='';
+				html +='<option value ="0">全部</option>';
+				$.each(result,function(i){
+					html +='<option value ="'+result[i].USERNAME+'">'+result[i].USERNAME+'</option>';
+				})
+				$(".selectUser").html(html);
+			}else{
+				$.messager.show({  
+					title: '提示',  
+					msg: '没有结果',  
+					timeout: 3000,  
+					showType: 'slide'  
+				});  
+			}
+		}
+	})
+}
+//部门列表
+function deptHtml2(){
+	$.ajax({
+		type:'GET',
+		url:url+'yz/getDeptList',
+		success:function(data){
+		$("#myShow").hide();
+			var result = data.deptArr;
+			//console.info(data);
+			if(result.length>0){
+				var html='';
+				//html +='<option value ="0">全部</option>';
+				$.each(result,function(i){
+					if(i==0){
+						DEPTNAME2 = result[i].DEPTNAME;
+						userHtml2();
+					}
+					html +='<option value ="'+result[i].DEPTNAME+'">'+result[i].DEPTNAME+'</option>';
+				})
+				$(".selectDept2").html(html);
+			}else{
+				$.messager.show({  
+					title: '提示',  
+					msg: '没有结果',  
+					timeout: 3000,  
+					showType: 'slide'  
+				});  
+			}
+		}
+	})
+}
+
+//巡查人员列表
+function userHtml2(){
+	$.ajax({
+		type:'GET',
+		url:url+'yz/getUserNameListByDept?deptname='+DEPTNAME2,
+		success:function(data){
+		$("#myShow").hide();
+			var result = data.userArr;
+			//console.info(data);
+			if(result.length>0){
+				var html='';
+				//html +='<option value ="0">全部</option>';
+				$.each(result,function(i){
+					if(i==0){
+						userName2 = result[i].USERNAME;
+					}
+					html +='<option value ="'+result[i].USERNAME+'">'+result[i].USERNAME+'</option>';
+				})
+				$(".selectUser2").html(html);
+			}else{
+				$.messager.show({  
+					title: '提示',  
+					msg: '没有结果',  
+					timeout: 3000,  
+					showType: 'slide'  
+				});  
+			}
+		}
+	})
+}
+
+function selectDept(s){  
+    DEPTNAME=s;
+	userHtml();
+}
+
+function selectDept2(s){  
+    DEPTNAME2=s;
+	userHtml2();
+}
+function selectUser2(s){
+	map.clearOverlays();
+	userName2=s;
+	guijSeach();
+}
+function selectUser(s){
+	map.clearOverlays();
+	userName=s;
+	userAddress();
+}
+//轨迹回放
+$(".gjhf").click(function(){	
+	map.clearOverlays(); 
+	index=0;
+	play();
+})
+
+
+var index = 0;
+var label; //信息标签  
+//轨迹回放
+function play(){
+	var point = points[index];  
+	if(index > 0) {  
+		map.addOverlay(new BMap.Polyline([points[index - 1], point], {strokeColor: "blue", strokeWeight: 3, strokeOpacity: 0.8}));  
+	}  
+	//label.setContent("经度: " + point.lng + "<br>纬度: " + point.lat);  
+	//marker.setPosition(point);  
+	var polyline = new BMap.Polyline(point);
+	//console.info(points);
+    map.addOverlay(polyline);
+	index++;  
+	//map.panTo(point);  //画面跟随
+	if(index < points.length) {  
+		timer = window.setTimeout("play(" + index + ")", 1000);  
+	} else {  
+		//map.panTo(point);  
+	}  
+}
+
+//j:1 则是定位；j:2 则是轨迹
+function search(obj,i,j){
+	var result = obj;
+    //map.clearOverlays(); // 清除标注信息
+    //points = []; // 添加折线运动轨迹
+	var wait = 1000;
+	if(j==2){
+	    for(i=0;i<result.length;i++){
+	        var longitude = result[i].lgtd; // 经度
+	        var latitude = result[i].lttd; // 纬度
+	        //console.info(result[i])
+	        var point = new BMap.Point(longitude, latitude); // 填充标注点
+	        //console.info(point);
+	        point=c.WGS2BD09(point);//坐标转换
+	        point = new BMap.Point(point.lng,point.lat);
+			//console.info(point);
+	        if(i==0)
+	        {
+	            //city = result[i].address; 
+	            map.setCenter(point); // 设置中心坐标
+	        }
+	        obj.userName=userName2;
+        	obj.time=result[i].fwdtime;
+        	obj.title="轨迹点";
+	        addMarker(point, map, result[i],obj);
+	        points.push(point);
+	    }
+	    var polyline = new BMap.Polyline(points,{strokeColor:"blue", strokeWeight:3, strokeOpacity:0.8});
+    	map.addOverlay(polyline);
+    }else if(j==1){
+    	var longitude = result.NM_LGTD; // 经度
+        var latitude = result.NM_LTTD; // 纬度
+        var point = new BMap.Point(longitude, latitude); // 填充标注点
+        //console.info(point);
+        point=c.WGS2BD09(point);//坐标转换
+        point = new BMap.Point(point.lng,point.lat);
+		//console.info(point);
+        if(i==0)
+        {
+            //city = result[i].address; 
+            map.setCenter(point); // 设置中心坐标
+        }
+        obj.userName=obj.ST_EMPID;
+        obj.time=obj.DT_SUB;
+        obj.title="位置";
+        addMarker(point, map, result,obj);
+    }
+    
+    //console.info(points);
+}
+	
+//编写自定义函数,创建标注
+function addMarker(point, map, tips,obj){
+	//console.info(tips)
+ 	var myIcon = new BMap.Icon("../baiduMap/images/img_point_red.png", new BMap.Size(7, 7)); 
+	//画点
+	var sContent =
+	"<div class='city_BG' style='font-size:12px;'>" +
+	"<table style='magin-top:10px;magin-left:10px;height: 100%;width: 100%;'>" +
+	"<tr>" +
+	"<td style='width:60px;' >巡查员："+obj.userName+"</td>" +
+	"</tr>" +
+	"<tr>" +
+	"<td style='width:80px;'>巡查时间："+obj.time+"</td>" +
+	"</tr>" +
+	"</table>" +
+	"</div>";
+	var colorStr = "green";
+	var opts = {
+		  width : 200,     // 信息窗口宽度
+		  height: 70,     // 信息窗口高度
+		  title : obj.title, // 信息窗口标题
+		  enableMessage:true,//设置允许信息窗发送短息
+		  message:""
+		};
+			//marker = new BMap.Marker(point);
+			var marker = new window.BMap.Marker(point,{icon:myIcon}); //按照地图点坐标生成标记
+			map.addOverlay(marker);
+			var infoWindow = new BMap.InfoWindow(sContent, opts);  // 创建信息窗口对象 
+			marker.addEventListener("click", function(){          
+			map.openInfoWindow(infoWindow,point); //开启信息窗口
+		});
+}
+function GetQueryString(name)
+{
+     var reg = new RegExp("(^|&)"+ name +"=([^&]*)(&|$)");
+     var r = window.location.search.substr(1).match(reg);
+     if(r!=null)return  unescape(r[2]); return null;
+}
+	
+</script>
